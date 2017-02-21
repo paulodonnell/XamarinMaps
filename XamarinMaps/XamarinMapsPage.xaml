@@ -2,9 +2,13 @@
 <ContentPage xmlns="http://xamarin.com/schemas/2014/forms" 
 		xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml" 
 		xmlns:local="clr-namespace:XamarinMaps" 
-		xmlns:tkmap="clr-namespace:TK.CustomMap;assembly=TK.CustomMap"
+		xmlns:maps="clr-namespace:Xamarin.Forms.Maps;assembly=Xamarin.Forms.Maps"
 		x:Class="XamarinMaps.XamarinMapsPage">
 	<StackLayout x:Name="stackLayout" Orientation="Vertical">
-	<tkmap:TKCustomMap x:Name="map"/>
+		<local:CustomMap x:Name="map"/>
+		<StackLayout x:Name="btnStack" Orientation="Horizontal">
+			<Button x:Name="showRouteBtn"/>
+			<Button x:Name="clearRouteBtn"/>
+		</StackLayout>
 	</StackLayout>
 </ContentPage>

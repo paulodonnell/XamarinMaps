@@ -4,7 +4,6 @@ using System.Linq;
 
 using Foundation;
 using UIKit;
-using TK.CustomMap.iOSUnified;
 
 namespace XamarinMaps.iOS
 {
@@ -20,8 +19,7 @@ namespace XamarinMaps.iOS
 			Xamarin.Calabash.Start();
 #endif
 
-            TKCustomMapRenderer.InitMapRenderer();
-            NativePlacesApi.Init();
+            Xamarin.FormsMaps.Init();
 
             LoadApplication(new App());
 

@@ -99,12 +99,6 @@
     <Reference Include="Xamarin.GooglePlayServices.Location">
       <HintPath>..\packages\Xamarin.GooglePlayServices.Location.29.0.0.1\lib\MonoAndroid41\Xamarin.GooglePlayServices.Location.dll</HintPath>
     </Reference>
-    <Reference Include="TK.CustomMap.Android">
-      <HintPath>..\packages\TK.CustomMap.1.5.1\lib\MonoAndroid10\TK.CustomMap.Android.dll</HintPath>
-    </Reference>
-    <Reference Include="TK.CustomMap">
-      <HintPath>..\packages\TK.CustomMap.1.5.1\lib\MonoAndroid10\TK.CustomMap.dll</HintPath>
-    </Reference>
     <Reference Include="Newtonsoft.Json">
       <HintPath>..\packages\Newtonsoft.Json.9.0.1\lib\portable-net45+wp80+win8+wpa81\Newtonsoft.Json.dll</HintPath>
     </Reference>
