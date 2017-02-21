@@ -13,13 +13,14 @@ namespace XamarinMaps.iOS
 {
     public class CustomMapRendererIos : MapRenderer
     {
+        private static readonly UIColor AltRouteColor = UIColor.LightGray;
+        private static readonly UIColor RouteColor = UIColor.FromRGBA(0, 179, 253, 255);
+
         CLLocationManager locationManager;
         bool centerOnUserRequested;
 
         List<IMKAnnotation> annotationsList;
         List<IMKOverlay> overlaysList;
-
-        MKPolylineRenderer polylineRenderer;
 
         MKMapView NativeMapView
         {
@@ -43,7 +44,20 @@ namespace XamarinMaps.iOS
             overlaysList = new List<IMKOverlay>();
 
             locationManager = new CLLocationManager();
-            locationManager.RequestWhenInUseAuthorization();
+            locationManager.DesiredAccuracy = 1; //accurate to 1 meter
+            locationManager.PausesLocationUpdatesAutomatically = false;
+
+            // iOS 8 has additional permissions requirements
+            if (UIDevice.CurrentDevice.CheckSystemVersion(8, 0))
+            {
+                locationManager.RequestAlwaysAuthorization(); // works in background
+                //locMgr.RequestWhenInUseAuthorization (); // only in foreground
+            }
+
+            if (UIDevice.CurrentDevice.CheckSystemVersion(9, 0))
+            {
+                locationManager.AllowsBackgroundLocationUpdates = true;
+            }
         }
 
         protected override void OnElementChanged(Xamarin.Forms.Platform.iOS.ElementChangedEventArgs<View> e)
@@ -122,7 +136,6 @@ namespace XamarinMaps.iOS
         {
             if (NativeMapView.UserLocation.Location != null)
             {
-                
                 CLLocationCoordinate2D coords = NativeMapView.UserLocation.Coordinate;
                 MKCoordinateSpan span = new MKCoordinateSpan(KilometresToLatitudeDegrees(2), KilometresToLongitudeDegrees(2, coords.Latitude));
                 NativeMapView.Region = new MKCoordinateRegion(coords, span);
@@ -169,6 +182,7 @@ namespace XamarinMaps.iOS
             MKDirectionsRequest directionRequest = new MKDirectionsRequest();
             directionRequest.Source = sourceMapItem;
             directionRequest.Destination = destinationMapItem;
+            directionRequest.RequestsAlternateRoutes = true;
             directionRequest.TransportType = MKDirectionsTransportType.Automobile;
 
             MKDirections directions = new MKDirections(directionRequest);
@@ -181,19 +195,33 @@ namespace XamarinMaps.iOS
                 }
                 else
                 {
-                    MKRoute route = response.Routes[0];
+                    MKRoute route;
 
-                    //save overlay so it can be removed later if requested
-                    overlaysList.Add(route.Polyline);
+                    //loop through backwards so first most route is renderered on top
+                    for (int i = response.Routes.Length - 1; i >= 0; i--)
+                    {
+                        route = response.Routes[i];
 
-                    nativeMapView.AddOverlay(route.Polyline, MKOverlayLevel.AboveRoads);
+                        //save overlay so it can be removed later if requested
+                        overlaysList.Add(route.Polyline);
+                        
+                        nativeMapView.AddOverlay(route.Polyline, MKOverlayLevel.AboveRoads);
 
-                    //MKMapRect rect = route.Polyline.BoundingMapRect;
-                    //MKMapRect expandedRect = nativeMapView.MapRectThatFits(rect, new UIEdgeInsets(20,20,20,20));
+                        MKPolylineRenderer polylineRenderer = nativeMapView.RendererForOverlay(route.Polyline) as MKPolylineRenderer;
 
-                    //nativeMapView.SetRegion(MKCoordinateRegion.FromMapRect(expandedRect), true);
+                        if(i == 0)
+                        {                            
+                            polylineRenderer.StrokeColor = RouteColor;
+                        }
+
+                        //MKMapRect rect = route.Polyline.BoundingMapRect;
+                        //MKMapRect expandedRect = nativeMapView.MapRectThatFits(rect, new UIEdgeInsets(20,20,20,20));
+                        
+                        //nativeMapView.SetRegion(MKCoordinateRegion.FromMapRect(expandedRect), true);                        
+                    }
                 }
-            });                
+            });    
+
         }
 
         void ClearRoute(object sender, EventArgs e)
@@ -206,13 +234,10 @@ namespace XamarinMaps.iOS
         }
 
         MKOverlayRenderer GetOverlayRenderer(MKMapView mapView, IMKOverlay overlay)
-        {
-            if (polylineRenderer == null)
-            {
-                polylineRenderer = new MKPolylineRenderer(overlay as MKPolyline);
-                polylineRenderer.StrokeColor = UIColor.Blue;
-                polylineRenderer.LineWidth = 5;
-            }
+        {            
+            MKPolylineRenderer polylineRenderer = new MKPolylineRenderer(overlay as MKPolyline);
+            polylineRenderer.StrokeColor = AltRouteColor;
+            polylineRenderer.LineWidth = 4;
 
             return polylineRenderer;
         }

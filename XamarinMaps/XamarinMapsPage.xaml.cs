@@ -67,16 +67,21 @@ namespace XamarinMaps
             dublinPin.Position = new Position(53.3498, -6.2603);
 
             Pin sligoPin = new Pin();
-            sligoPin.Label = "sligoPin";
+            sligoPin.Label = "Sligo";
             sligoPin.Position = new Position(54.2766, -8.4761);
             sligoPin.Type = PinType.SavedPin;
+
+            Pin roebuckPin = new Pin();
+            roebuckPin.Label = "Roebuck";
+            roebuckPin.Position = new Position(53.3, -6.22);
+            roebuckPin.Type = PinType.SavedPin;
 
             //float zoom = 0.3f; //100;
             //map.MoveToRegion(MapSpan.FromCenterAndRadius(dublinPin.Position, Distance.FromMiles(zoom)));
             //map.Pins.Add(dublinPin);
             //map.Pins.Add(sligoPin);
 
-            map.CalculateRoute(dublinPin.Position, sligoPin.Position);
+            map.CalculateRoute(dublinPin.Position, roebuckPin.Position);
         }
    }
 }
