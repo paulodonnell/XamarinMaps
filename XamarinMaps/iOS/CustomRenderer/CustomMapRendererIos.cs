@@ -120,12 +120,7 @@ namespace XamarinMaps.iOS
 
         void CenterOnUsersLocation(object sender, EventArgs e)
         {
-            if(CustomMapView.LocationAuthStatus == CustomMap.LocAuthStatus.NotAllowed)
-            {
-                locationManager.RequestWhenInUseAuthorization();
-                centerOnUserRequested = true;
-            }
-            else if (NativeMapView.UserLocation.Location != null)
+            if (NativeMapView.UserLocation.Location != null)
             {
                 
                 CLLocationCoordinate2D coords = NativeMapView.UserLocation.Coordinate;

@@ -22,6 +22,8 @@ namespace XamarinMaps
 
             //stackLayout.Children.Add(map);
 
+            map.IsShowingUser = true;
+
             InitMapRoute();
             InitBtns();
         }
@@ -44,14 +46,16 @@ namespace XamarinMaps
                 map.ClearRoute();
             };
 
-            toggleLocation.Text = "Toggle Loc";
+            toggleLocation.Text = "My Loc";
             toggleLocation.Clicked += (object sender, EventArgs e) =>
             {
-                map.IsShowingUser = !map.IsShowingUser;
-
-                if(map.IsShowingUser)
+                if(map.LocationAuthStatus == CustomMap.LocAuthStatus.NotAllowed)
                 {
-                    map.CenterOnUsersLocation();                    
+                    DisplayAlert("Location Services Not Enabled", "Enable location services in Settings", "Ok");
+                }
+                else
+                {
+                    map.CenterOnUsersLocation();                                        
                 }
             };
         }

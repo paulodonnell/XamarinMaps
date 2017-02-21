@@ -106,9 +106,7 @@ namespace XamarinMaps
         public event EventHandler CenterOnUsersLocationNativeHandler;
         public void CenterOnUsersLocation()
         {
-            IsShowingUser = true;
-
-            if(CenterOnUsersLocationNativeHandler != null)
+            if(IsShowingUser && CenterOnUsersLocationNativeHandler != null)
             {
                 CenterOnUsersLocationNativeHandler(this, EventArgs.Empty);
             }
