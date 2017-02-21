@@ -6,6 +6,27 @@ namespace XamarinMaps
 {
     public class CustomMap : Map
     {
+        public enum LocAuthStatus
+        {
+            NotAllowed,
+            AllowedInForeground,
+            AllowedInBackground
+        };
+
+        //LocationAuthStatusProperty 
+        public static readonly BindableProperty LocationAuthStatusProperty =
+            BindableProperty.Create("LocationAuthStatus", typeof(LocAuthStatus), typeof(CustomMap), defaultValue: LocAuthStatus.NotAllowed, propertyChanged: OnLocationAuthStatusChanged);
+
+        public LocAuthStatus LocationAuthStatus
+        {
+            get { return (LocAuthStatus)GetValue(LocationAuthStatusProperty); }
+            set { SetValue(LocationAuthStatusProperty, value); }
+        }
+
+        public static void OnLocationAuthStatusChanged(BindableObject bindable, object oldValue, object newValue)
+        {
+        }
+
         //RouteSourceProperty 
         public static readonly BindableProperty RouteSourceProperty =
             BindableProperty.Create("RouteSource", typeof(Position), typeof(CustomMap), defaultValue: new Position(), propertyChanged: OnRouteSourceChanged);
@@ -53,7 +74,6 @@ namespace XamarinMaps
         }
 
         public event EventHandler CalculateRouteNativeHandler;
-
         public void CalculateRoute(Position source, Position destination)
         {
             RouteSource = source;
@@ -66,12 +86,31 @@ namespace XamarinMaps
         }
 
         public event EventHandler ClearRouteNativeHandler;
-
         public void ClearRoute()
         {
-            if(ClearRouteNativeHandler != null)                
+            if (ClearRouteNativeHandler != null)
             {
                 ClearRouteNativeHandler(this, EventArgs.Empty);
+            }
+        }
+
+        public Action<Position> onUserLocationUpdated;
+        public void OnUserLocationUpdatedFromNative(Position userPosition)
+        {
+            if(onUserLocationUpdated != null)
+            {
+                onUserLocationUpdated(userPosition);
+            }
+        }
+
+        public event EventHandler CenterOnUsersLocationNativeHandler;
+        public void CenterOnUsersLocation()
+        {
+            IsShowingUser = true;
+
+            if(CenterOnUsersLocationNativeHandler != null)
+            {
+                CenterOnUsersLocationNativeHandler(this, EventArgs.Empty);
             }
         }
     }

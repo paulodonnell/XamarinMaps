@@ -9,6 +9,7 @@
 		<StackLayout x:Name="btnStack" Orientation="Horizontal">
 			<Button x:Name="showRouteBtn"/>
 			<Button x:Name="clearRouteBtn"/>
+			<Button x:Name="toggleLocation"/>
 		</StackLayout>
 	</StackLayout>
 </ContentPage>

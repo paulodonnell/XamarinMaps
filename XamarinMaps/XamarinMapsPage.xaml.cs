@@ -43,6 +43,17 @@ namespace XamarinMaps
             {
                 map.ClearRoute();
             };
+
+            toggleLocation.Text = "Toggle Loc";
+            toggleLocation.Clicked += (object sender, EventArgs e) =>
+            {
+                map.IsShowingUser = !map.IsShowingUser;
+
+                if(map.IsShowingUser)
+                {
+                    map.CenterOnUsersLocation();                    
+                }
+            };
         }
 
         void InitMapRoute()
