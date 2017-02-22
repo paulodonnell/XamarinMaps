@@ -64,9 +64,10 @@ namespace XamarinMaps
                 InitMapRoute();
             };
 
-            clearRouteBtn.Text = "Clear Route";
+            clearRouteBtn.Text = "Clear";
             clearRouteBtn.Clicked += (object sender, EventArgs e) => 
             {
+                searchEntry.Text = null;
                 map.ClearRoute();
             };
 

@@ -7,12 +7,15 @@ using CoreLocation;
 using MapKit;
 using UIKit;
 using System.Collections.Generic;
+using CoreGraphics;
 
 [assembly: ExportRenderer (typeof(CustomMap), typeof(CustomMapRendererIos))]
 namespace XamarinMaps.iOS
 {
     public class CustomMapRendererIos : MapRenderer
     {
+        private const string DefaultPinId = "defaultPin";
+
         private static readonly UIColor AltRouteColor = UIColor.LightGray;
         private static readonly UIColor RouteColor = UIColor.FromRGBA(0, 179, 253, 255);
 
@@ -25,6 +28,8 @@ namespace XamarinMaps.iOS
 
         MKMapItem sourceMapItem;
         MKMapItem destinationMapItem;
+
+        private UIGestureRecognizer longPressGestureRecognizer;
 
         MKMapView NativeMapView
         {
@@ -46,6 +51,8 @@ namespace XamarinMaps.iOS
         {
             annotationsList = new List<IMKAnnotation>();
             overlaysList = new List<IMKOverlay>();
+
+            longPressGestureRecognizer = new UILongPressGestureRecognizer(OnMapLongPress);
 
             InitLocationManager();
         }
@@ -82,6 +89,8 @@ namespace XamarinMaps.iOS
             {
                 NativeMapView.OverlayRenderer = null;
                 NativeMapView.DidUpdateUserLocation -= OnUserLocationUpdated;
+                NativeMapView.GetViewForAnnotation -= GetViewForAnnotation;
+                NativeMapView.RemoveGestureRecognizer(longPressGestureRecognizer);
 
                 CustomMap oldCustomMap = e.OldElement as CustomMap;
                 oldCustomMap.CalculateRouteFromUserLocationNativeHandler -= CalculateRouteFromUserLocation;
@@ -95,6 +104,8 @@ namespace XamarinMaps.iOS
             {
                 NativeMapView.OverlayRenderer = GetOverlayRenderer;
                 NativeMapView.DidUpdateUserLocation += OnUserLocationUpdated;
+                NativeMapView.GetViewForAnnotation += GetViewForAnnotation;
+                NativeMapView.AddGestureRecognizer(longPressGestureRecognizer);
 
                 CustomMap newCustomMap = e.NewElement as CustomMap;
                 newCustomMap.CalculateRouteFromUserLocationNativeHandler += CalculateRouteFromUserLocation;
@@ -117,6 +128,23 @@ namespace XamarinMaps.iOS
             }
         }
 
+        void OnMapLongPress()
+        {
+            if (longPressGestureRecognizer.State != UIGestureRecognizerState.Began) 
+                return;
+
+            CGPoint pixelLocation = longPressGestureRecognizer.LocationInView(NativeMapView);
+            CLLocationCoordinate2D coordinate = NativeMapView.ConvertPoint(pixelLocation, NativeMapView);
+
+            //add map annotation
+            MKPointAnnotation annotation = new MKPointAnnotation();
+            annotation.Coordinate = coordinate;
+            annotation.Title = string.Format("{0},{1}", coordinate.Latitude, coordinate.Longitude);
+
+            NativeMapView.AddAnnotation(annotation);
+            annotationsList.Add(annotation);
+        }
+
         void OnLocMgrAuthChanged(object sender, CLAuthorizationChangedEventArgs e)
         {
             if(e.Status == CLAuthorizationStatus.Denied)
@@ -135,26 +163,28 @@ namespace XamarinMaps.iOS
 
         void OnLocMgrLocationsUpdated(object sender, CLLocationsUpdatedEventArgs e)
         {
-            if (CustomMapView != null && CustomMapView.IsNavigating)
-            {
-                CLLocation newLocation = e.Locations[e.Locations.Length - 1];
+            //if (CustomMapView != null && CustomMapView.IsNavigating)
+            //{
+            //    CLLocation newLocation = e.Locations[e.Locations.Length - 1];
 
-                if (lastUserLocation != null)
-                {
-                    double dist = newLocation.DistanceFrom(lastUserLocation);
+            //    if (lastUserLocation != null)
+            //    {
+            //        double dist = newLocation.DistanceFrom(lastUserLocation);
 
-                    if (dist > 10)
-                    {
-                        System.Diagnostics.Debug.WriteLine(dist);
+            //        if (dist > 10)
+            //        {
+            //            //TODO: podonnell: There is an issue on the simulator whereby calculating the route details resets the user location
+            //            //it is then updated again by the location manager which calls this method again and results in an infinite loop
+            //            System.Diagnostics.Debug.WriteLine(dist);
 
-                        //we have moved over 10m => update route
-                        sourceMapItem = MKMapItem.MapItemForCurrentLocation();
-                        CalculateRouteDetails(false);
-                    }
-                }
+            //            //we have moved over 10m => update route
+            //            sourceMapItem = MKMapItem.MapItemForCurrentLocation();
+            //            CalculateRouteDetails(false);
+            //        }
+            //    }
 
-                lastUserLocation = newLocation;
-            }
+            //    lastUserLocation = newLocation;
+            //}
         }
 
         void OnUserLocationUpdated(object sender, MKUserLocationEventArgs e)
@@ -332,6 +362,46 @@ namespace XamarinMaps.iOS
             polylineRenderer.LineWidth = 4;
 
             return polylineRenderer;
+        }
+
+        MKAnnotationView GetViewForAnnotation(MKMapView mapView, IMKAnnotation annotation)
+        {
+            if (IsUserLocationAnnotation(mapView, annotation))
+                return null;
+
+            MKPinAnnotationView pinView = NativeMapView.DequeueReusableAnnotation(DefaultPinId) as MKPinAnnotationView;
+
+            if(pinView == null)
+            {
+                pinView = new MKPinAnnotationView(annotation, DefaultPinId);
+            }
+
+            pinView.CanShowCallout = true;
+            pinView.AnimatesDrop = true;
+
+            UIButton button = new UIButton(UIButtonType.ContactAdd);
+            button.TouchUpInside += (object sender, EventArgs e) => 
+            {
+                sourceMapItem = MKMapItem.MapItemForCurrentLocation();
+                destinationMapItem = new MKMapItem(new MKPlacemark(annotation.Coordinate));
+            
+                CalculateRouteDetails();
+            };
+
+            pinView.RightCalloutAccessoryView = button;
+
+            return pinView;
+        }
+
+        private bool IsUserLocationAnnotation(MKMapView mapView, IMKAnnotation annotation)
+        {
+            var userLocationAnnotation = ObjCRuntime.Runtime.GetNSObject(annotation.Handle) as MKUserLocation;
+            if (userLocationAnnotation != null)
+            {
+                return userLocationAnnotation == mapView.UserLocation;
+            }
+
+            return false;
         }
 
         void SearchLocal(object sender, EventArgs e)
