@@ -7,6 +7,7 @@
 	<StackLayout x:Name="stackLayout" Orientation="Vertical">
 		<local:CustomMap x:Name="map"/>
 		<StackLayout x:Name="btnStack" Orientation="Horizontal">
+			<Button x:Name="navigateBtn"/>
 			<Button x:Name="showRouteBtn"/>
 			<Button x:Name="clearRouteBtn"/>
 			<Button x:Name="toggleLocation"/>

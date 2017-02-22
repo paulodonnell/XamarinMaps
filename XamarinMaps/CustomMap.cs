@@ -13,17 +13,19 @@ namespace XamarinMaps
             AllowedInBackground
         };
 
-        //LocationAuthStatusProperty 
-        public static readonly BindableProperty LocationAuthStatusProperty =
-            BindableProperty.Create("LocationAuthStatus", typeof(LocAuthStatus), typeof(CustomMap), defaultValue: LocAuthStatus.NotAllowed, propertyChanged: OnLocationAuthStatusChanged);
+        public static LocAuthStatus LocationAuthStatus = LocAuthStatus.NotAllowed;
 
-        public LocAuthStatus LocationAuthStatus
+        //IsNavigatingProperty 
+        public static readonly BindableProperty IsNavigatingProperty =
+        BindableProperty.Create("IsNavigating", typeof(bool), typeof(CustomMap), defaultValue: false, propertyChanged: OnIsNavigatingChanged);
+
+        public bool IsNavigating
         {
-            get { return (LocAuthStatus)GetValue(LocationAuthStatusProperty); }
-            set { SetValue(LocationAuthStatusProperty, value); }
+            get { return (bool)GetValue(IsNavigatingProperty); }
+            set { SetValue(IsNavigatingProperty, value); }
         }
 
-        public static void OnLocationAuthStatusChanged(BindableObject bindable, object oldValue, object newValue)
+        public static void OnIsNavigatingChanged(BindableObject bindable, object oldValue, object newValue)
         {
         }
 
@@ -71,6 +73,18 @@ namespace XamarinMaps
 
         public CustomMap()
         {            
+        }
+
+        public event EventHandler CalculateRouteFromUserLocationNativeHandler;
+        public void CalculateRouteFromUserLocation(Position destination)
+        {
+            RouteDestination = destination;
+
+            if(CalculateRouteFromUserLocationNativeHandler != null)
+            {
+                CalculateRouteFromUserLocationNativeHandler(this, EventArgs.Empty);
+                IsNavigating = true;
+            }
         }
 
         public event EventHandler CalculateRouteNativeHandler;

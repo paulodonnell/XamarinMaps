@@ -16,11 +16,15 @@ namespace XamarinMaps.iOS
         private static readonly UIColor AltRouteColor = UIColor.LightGray;
         private static readonly UIColor RouteColor = UIColor.FromRGBA(0, 179, 253, 255);
 
-        CLLocationManager locationManager;
+        CLLocationManager locMgr;
+        private CLLocation lastUserLocation;
         bool centerOnUserRequested;
 
         List<IMKAnnotation> annotationsList;
         List<IMKOverlay> overlaysList;
+
+        MKMapItem sourceMapItem;
+        MKMapItem destinationMapItem;
 
         MKMapView NativeMapView
         {
@@ -43,21 +47,31 @@ namespace XamarinMaps.iOS
             annotationsList = new List<IMKAnnotation>();
             overlaysList = new List<IMKOverlay>();
 
-            locationManager = new CLLocationManager();
-            locationManager.DesiredAccuracy = 1; //accurate to 1 meter
-            locationManager.PausesLocationUpdatesAutomatically = false;
+            InitLocationManager();
+        }
+
+        void InitLocationManager()
+        {
+            locMgr = new CLLocationManager();
+            locMgr.DesiredAccuracy = 1; //accurate to 1 meter
+            locMgr.PausesLocationUpdatesAutomatically = false;
 
             // iOS 8 has additional permissions requirements
             if (UIDevice.CurrentDevice.CheckSystemVersion(8, 0))
             {
-                locationManager.RequestAlwaysAuthorization(); // works in background
+                locMgr.RequestAlwaysAuthorization(); // works in background
                 //locMgr.RequestWhenInUseAuthorization (); // only in foreground
             }
 
             if (UIDevice.CurrentDevice.CheckSystemVersion(9, 0))
             {
-                locationManager.AllowsBackgroundLocationUpdates = true;
+                locMgr.AllowsBackgroundLocationUpdates = true;
             }
+
+            locMgr.AuthorizationChanged += OnLocMgrAuthChanged;
+            locMgr.LocationsUpdated += OnLocMgrLocationsUpdated;
+
+            locMgr.StartUpdatingLocation();
         }
 
         protected override void OnElementChanged(Xamarin.Forms.Platform.iOS.ElementChangedEventArgs<View> e)
@@ -66,12 +80,11 @@ namespace XamarinMaps.iOS
 
             if(e.OldElement != null)
             {
-                locationManager.AuthorizationChanged -= OnLocationAuthChanged;
-
                 NativeMapView.OverlayRenderer = null;
                 NativeMapView.DidUpdateUserLocation -= OnUserLocationUpdated;
 
                 CustomMap oldCustomMap = e.OldElement as CustomMap;
+                oldCustomMap.CalculateRouteFromUserLocationNativeHandler -= CalculateRouteFromUserLocation;
                 oldCustomMap.CalculateRouteNativeHandler -= CalculateRoute;
                 oldCustomMap.ClearRouteNativeHandler -= ClearRoute;
                 oldCustomMap.CenterOnUsersLocationNativeHandler -= CenterOnUsersLocation;
@@ -79,12 +92,11 @@ namespace XamarinMaps.iOS
 
             if(e.NewElement != null)
             {
-                locationManager.AuthorizationChanged += OnLocationAuthChanged;
-
                 NativeMapView.OverlayRenderer = GetOverlayRenderer;
                 NativeMapView.DidUpdateUserLocation += OnUserLocationUpdated;
 
                 CustomMap newCustomMap = e.NewElement as CustomMap;
+                newCustomMap.CalculateRouteFromUserLocationNativeHandler += CalculateRouteFromUserLocation;
                 newCustomMap.CalculateRouteNativeHandler += CalculateRoute;
                 newCustomMap.ClearRouteNativeHandler += ClearRoute;
                 newCustomMap.CenterOnUsersLocationNativeHandler += CenterOnUsersLocation;
@@ -103,22 +115,45 @@ namespace XamarinMaps.iOS
             }
         }
 
-        void OnLocationAuthChanged(object sender, CLAuthorizationChangedEventArgs e)
+        void OnLocMgrAuthChanged(object sender, CLAuthorizationChangedEventArgs e)
         {
             if(e.Status == CLAuthorizationStatus.Denied)
             {
-                CustomMapView.LocationAuthStatus = CustomMap.LocAuthStatus.NotAllowed;
+                CustomMap.LocationAuthStatus = CustomMap.LocAuthStatus.NotAllowed;
             }
             else if (e.Status == CLAuthorizationStatus.AuthorizedWhenInUse)
             {
-                CustomMapView.LocationAuthStatus = CustomMap.LocAuthStatus.AllowedInForeground;
+                CustomMap.LocationAuthStatus = CustomMap.LocAuthStatus.AllowedInForeground;
             }
             else if (e.Status == CLAuthorizationStatus.AuthorizedAlways)
             {
-                CustomMapView.LocationAuthStatus = CustomMap.LocAuthStatus.AllowedInBackground;
+                CustomMap.LocationAuthStatus = CustomMap.LocAuthStatus.AllowedInBackground;
             }
         }
 
+        void OnLocMgrLocationsUpdated(object sender, CLLocationsUpdatedEventArgs e)
+        {
+            if (CustomMapView != null && CustomMapView.IsNavigating)
+            {
+                CLLocation newLocation = e.Locations[e.Locations.Length - 1];
+
+                if (lastUserLocation != null)
+                {
+                    double dist = newLocation.DistanceFrom(lastUserLocation);
+
+                    if (dist > 10)
+                    {
+                        System.Diagnostics.Debug.WriteLine(dist);
+
+                        //we have moved over 10m => update route
+                        sourceMapItem = MKMapItem.MapItemForCurrentLocation();
+                        CalculateRouteDetails(false);
+                    }
+                }
+
+                lastUserLocation = newLocation;
+            }
+        }
 
         void OnUserLocationUpdated(object sender, MKUserLocationEventArgs e)
         {
@@ -137,8 +172,8 @@ namespace XamarinMaps.iOS
             if (NativeMapView.UserLocation.Location != null)
             {
                 CLLocationCoordinate2D coords = NativeMapView.UserLocation.Coordinate;
-                MKCoordinateSpan span = new MKCoordinateSpan(KilometresToLatitudeDegrees(2), KilometresToLongitudeDegrees(2, coords.Latitude));
-                NativeMapView.Region = new MKCoordinateRegion(coords, span);
+                MKCoordinateRegion region = MKCoordinateRegion.FromDistance(coords, 2000, 2000);
+                NativeMapView.SetRegion(region, true);
             }
             else
             {
@@ -151,19 +186,36 @@ namespace XamarinMaps.iOS
             NativeMapView.ShowsTraffic = CustomMapView.ShowTraffic;
         }
 
+        void CalculateRouteFromUserLocation(object sender, EventArgs e)
+        {
+            CLLocationCoordinate2D destinationLocation = new CLLocationCoordinate2D(CustomMapView.RouteDestination.Latitude, CustomMapView.RouteDestination.Longitude);
+            MKPlacemark destinationPlacemark = new MKPlacemark(coordinate: destinationLocation);
+
+            sourceMapItem = MKMapItem.MapItemForCurrentLocation();
+            destinationMapItem = new MKMapItem(destinationPlacemark);
+
+            MKPointAnnotation destinationAnnotation = new MKPointAnnotation();
+            //destinationAnnotation.Title = "Destination";
+            destinationAnnotation.Coordinate = destinationPlacemark.Location.Coordinate;
+
+            //save annotations so they can be removed later if requested
+            annotationsList.Add(destinationAnnotation);
+
+            NativeMapView.AddAnnotation(destinationAnnotation);
+
+            CalculateRouteDetails();
+        }
+
         void CalculateRoute(object sender, EventArgs e)
         {
-            CustomMap customMap = this.Element as CustomMap;
-            MKMapView nativeMapView = this.Control as MKMapView;
-
-            CLLocationCoordinate2D sourceLocation = new CLLocationCoordinate2D(customMap.RouteSource.Latitude, customMap.RouteSource.Longitude);
-            CLLocationCoordinate2D destinationLocation = new CLLocationCoordinate2D(customMap.RouteDestination.Latitude, customMap.RouteDestination.Longitude);
+            CLLocationCoordinate2D sourceLocation = new CLLocationCoordinate2D(CustomMapView.RouteSource.Latitude, CustomMapView.RouteSource.Longitude);
+            CLLocationCoordinate2D destinationLocation = new CLLocationCoordinate2D(CustomMapView.RouteDestination.Latitude, CustomMapView.RouteDestination.Longitude);
 
             MKPlacemark sourcePlacemark = new MKPlacemark(coordinate: sourceLocation);
             MKPlacemark destinationPlacemark = new MKPlacemark(coordinate: destinationLocation);
 
-            MKMapItem sourceMapItem = new MKMapItem(sourcePlacemark);
-            MKMapItem destinationMapItem = new MKMapItem(destinationPlacemark);
+            sourceMapItem = new MKMapItem(sourcePlacemark);
+            destinationMapItem = new MKMapItem(destinationPlacemark);
                     
             MKPointAnnotation sourceAnnotation = new MKPointAnnotation();
             //sourceAnnotation.Title = "Source";
@@ -177,24 +229,49 @@ namespace XamarinMaps.iOS
             annotationsList.Add(sourceAnnotation);
             annotationsList.Add(destinationAnnotation);
 
-            nativeMapView.ShowAnnotations(new IMKAnnotation[]{sourceAnnotation, destinationAnnotation}, true);
+            NativeMapView.AddAnnotation(sourceAnnotation);
+            NativeMapView.AddAnnotation(destinationAnnotation);
 
+            CalculateRouteDetails();
+        }
+
+        void CalculateRouteDetails(bool zoomMapToShowFullRoute = true, bool requestAlternateRoutes = true, MKDirectionsTransportType transportType = MKDirectionsTransportType.Automobile)
+        {
             MKDirectionsRequest directionRequest = new MKDirectionsRequest();
             directionRequest.Source = sourceMapItem;
             directionRequest.Destination = destinationMapItem;
-            directionRequest.RequestsAlternateRoutes = true;
-            directionRequest.TransportType = MKDirectionsTransportType.Automobile;
+            directionRequest.RequestsAlternateRoutes = requestAlternateRoutes;
+            directionRequest.TransportType = transportType;
 
-            MKDirections directions = new MKDirections(directionRequest);
+            MKDirections eta = new MKDirections(directionRequest);
 
-            directions.CalculateDirections((MKDirectionsResponse response, Foundation.NSError error) =>
+            eta.CalculateETA((MKETAResponse response, Foundation.NSError error) =>
             {
-                if(error != null)
+                if (error != null)
                 {
                     System.Diagnostics.Debug.WriteLine(error.Description);
                 }
                 else
                 {
+                    TimeSpan time = TimeSpan.FromSeconds(response.ExpectedTravelTime);
+                    System.Diagnostics.Debug.WriteLine(time.ToString(@"hh\:mm\:ss\:fff"));
+                }
+            });
+
+            MKDirections directions = new MKDirections(directionRequest);
+
+
+            directions.CalculateDirections((MKDirectionsResponse response, Foundation.NSError error) =>
+            {                
+                if (error != null)
+                {
+                    System.Diagnostics.Debug.WriteLine(error.Description);
+                }
+                else
+                {
+                    //remove previous route overlays
+                    ClearOverlays();
+
                     MKRoute route;
 
                     //loop through backwards so first most route is renderered on top
@@ -204,31 +281,44 @@ namespace XamarinMaps.iOS
 
                         //save overlay so it can be removed later if requested
                         overlaysList.Add(route.Polyline);
-                        
-                        nativeMapView.AddOverlay(route.Polyline, MKOverlayLevel.AboveRoads);
 
-                        MKPolylineRenderer polylineRenderer = nativeMapView.RendererForOverlay(route.Polyline) as MKPolylineRenderer;
+                        NativeMapView.AddOverlay(route.Polyline, MKOverlayLevel.AboveRoads);
 
-                        if(i == 0)
-                        {                            
+                        MKPolylineRenderer polylineRenderer = NativeMapView.RendererForOverlay(route.Polyline) as MKPolylineRenderer;
+
+                        if (i == 0)
+                        {
                             polylineRenderer.StrokeColor = RouteColor;
                         }
 
-                        //MKMapRect rect = route.Polyline.BoundingMapRect;
-                        //MKMapRect expandedRect = nativeMapView.MapRectThatFits(rect, new UIEdgeInsets(20,20,20,20));
-                        
-                        //nativeMapView.SetRegion(MKCoordinateRegion.FromMapRect(expandedRect), true);                        
+                        if(zoomMapToShowFullRoute)
+                        {
+                            MKMapRect rect = route.Polyline.BoundingMapRect;
+                            MKMapRect expandedRect = NativeMapView.MapRectThatFits(rect, new UIEdgeInsets(20, 20, 20, 20));
+                            
+                            NativeMapView.SetRegion(MKCoordinateRegion.FromMapRect(expandedRect), true);                            
+                        }
                     }
                 }
-            });    
-
+            });
         }
 
         void ClearRoute(object sender, EventArgs e)
         {
+            CustomMapView.IsNavigating = false;
+
+            ClearAnnotations();
+            ClearOverlays();
+        }
+
+        void ClearAnnotations()
+        {
             NativeMapView.RemoveAnnotations(annotationsList.ToArray());
             annotationsList.Clear();
+        }
 
+        void ClearOverlays()
+        {
             NativeMapView.RemoveOverlays(overlaysList.ToArray());
             overlaysList.Clear();
         }
@@ -240,25 +330,6 @@ namespace XamarinMaps.iOS
             polylineRenderer.LineWidth = 4;
 
             return polylineRenderer;
-        }
-
-        /// <summary>Converts kilometres to latitude degrees</summary>
-        public double KilometresToLatitudeDegrees(double kms)
-        {
-            double earthRadius = 6371.0; // in kms
-            double radiansToDegrees = 180.0 / Math.PI;
-            return (kms / earthRadius) * radiansToDegrees;
-        }
-
-        /// <summary>Converts kilometres to longitudinal degrees at a specified latitude</summary>
-        public double KilometresToLongitudeDegrees(double kms, double atLatitude)
-        {
-            double earthRadius = 6371.0; // in kms
-            double degreesToRadians = Math.PI / 180.0;
-            double radiansToDegrees = 180.0 / Math.PI;
-            // derive the earth's radius at that point in latitude
-            double radiusAtLatitude = earthRadius * Math.Cos(atLatitude * degreesToRadians);
-            return (kms / radiusAtLatitude) * radiansToDegrees;
         }
    }
 }
