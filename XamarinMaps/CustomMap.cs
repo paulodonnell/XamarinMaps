@@ -125,5 +125,30 @@ namespace XamarinMaps
                 CenterOnUsersLocationNativeHandler(this, EventArgs.Empty);
             }
         }
+
+        //SearchTextProperty 
+        public static readonly BindableProperty SearchTextProperty =
+            BindableProperty.Create("SearchText", typeof(string), typeof(CustomMap), defaultValue: string.Empty, propertyChanged: OnSearchTextChanged);
+
+        public string SearchText
+        {
+            get { return (string)GetValue(SearchTextProperty); }
+            set { SetValue(SearchTextProperty, value); }
+        }
+
+        public static void OnSearchTextChanged(BindableObject bindable, object oldValue, object newValue)
+        {
+        }
+
+        public event EventHandler SearchLocalNativeHandler;
+        public void SearchLocal(string text)
+        {
+            SearchText = text;
+
+            if(SearchLocalNativeHandler != null)
+            {
+                SearchLocalNativeHandler(this, EventArgs.Empty);
+            }
+        }
     }
 }

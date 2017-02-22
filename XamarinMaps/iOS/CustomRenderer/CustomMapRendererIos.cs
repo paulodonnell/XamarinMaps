@@ -88,6 +88,7 @@ namespace XamarinMaps.iOS
                 oldCustomMap.CalculateRouteNativeHandler -= CalculateRoute;
                 oldCustomMap.ClearRouteNativeHandler -= ClearRoute;
                 oldCustomMap.CenterOnUsersLocationNativeHandler -= CenterOnUsersLocation;
+                oldCustomMap.SearchLocalNativeHandler -= SearchLocal;
             }
 
             if(e.NewElement != null)
@@ -100,6 +101,7 @@ namespace XamarinMaps.iOS
                 newCustomMap.CalculateRouteNativeHandler += CalculateRoute;
                 newCustomMap.ClearRouteNativeHandler += ClearRoute;
                 newCustomMap.CenterOnUsersLocationNativeHandler += CenterOnUsersLocation;
+                newCustomMap.SearchLocalNativeHandler += SearchLocal;
 
                 UpdateShowTraffic();
             }
@@ -330,6 +332,42 @@ namespace XamarinMaps.iOS
             polylineRenderer.LineWidth = 4;
 
             return polylineRenderer;
+        }
+
+        void SearchLocal(object sender, EventArgs e)
+        {
+            MKLocalSearchRequest request = new MKLocalSearchRequest();
+            request.NaturalLanguageQuery = CustomMapView.SearchText;
+            request.Region = NativeMapView.Region;
+
+            MKLocalSearch search = new MKLocalSearch(request);
+
+            search.Start((MKLocalSearchResponse response, Foundation.NSError error) =>
+            {
+                if(error != null)
+                {
+                    System.Diagnostics.Debug.WriteLine(error.Description);
+                }
+                else if(response.MapItems.Length == 0)                    
+                {
+                    System.Diagnostics.Debug.WriteLine("No matches found for search: " + CustomMapView.SearchText);
+                }
+                else
+                {
+                    ClearRoute(null, null);
+
+                    foreach(MKMapItem mapItem in response.MapItems)
+                    {
+                        MKPointAnnotation annotation = new MKPointAnnotation();
+                        annotation.Coordinate = mapItem.Placemark.Coordinate;
+                        annotation.Title = mapItem.Name;
+
+                        annotationsList.Add(annotation);
+                    }
+
+                    NativeMapView.ShowAnnotations(annotationsList.ToArray(), true);
+                }
+            });                
         }
    }
 }

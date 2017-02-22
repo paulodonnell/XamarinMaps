@@ -24,8 +24,26 @@ namespace XamarinMaps
 
             map.IsShowingUser = true;
 
-            InitMapRoute();
+            InitSearch();
             InitBtns();
+        }
+
+        void InitSearch()
+        {
+            searchStack.Padding = new Thickness(10, 0);
+            searchStack.Spacing = 20;
+
+            searchEntry.Placeholder = "Enter text...";
+            searchEntry.HorizontalOptions = LayoutOptions.FillAndExpand;
+
+            searchBtn.Text = "Search";
+            searchBtn.Clicked += (object sender, EventArgs e) => 
+            {
+                if(!string.IsNullOrEmpty(searchEntry.Text))
+                {
+                    map.SearchLocal(searchEntry.Text);                    
+                }
+            };
         }
 
         void InitBtns()
@@ -52,7 +70,7 @@ namespace XamarinMaps
                 map.ClearRoute();
             };
 
-            toggleLocation.Text = "My Loc";
+            toggleLocation.Text = "Loc.";
             toggleLocation.Clicked += (object sender, EventArgs e) =>
             {
                 if(CustomMap.LocationAuthStatus == CustomMap.LocAuthStatus.NotAllowed)
