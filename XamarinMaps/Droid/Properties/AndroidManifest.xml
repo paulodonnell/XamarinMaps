@@ -5,9 +5,11 @@
 		<!--<meta-data android:name="com.google.android.maps.v2.API_KEY" android:value="YOUR API KEY" />-->
 		<meta-data android:name="com.google.android.geo.API_KEY" android:value="AIzaSyAp2OFpyy6ktErohUcfi8lCmddZsIxbjWI" />
 	</application>
-
 	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 	<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 	<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-
+	<uses-permission android:name="android.permission.ACCESS_LOCATION_EXTRA_COMMANDS" />
+	<uses-permission android:name="android.permission.ACCESS_MOCK_LOCATION" />
+	<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+	<uses-permission android:name="android.permission.INTERNET" />
 </manifest>

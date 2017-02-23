@@ -74,7 +74,7 @@ namespace XamarinMaps
             toggleLocation.Text = "Loc.";
             toggleLocation.Clicked += (object sender, EventArgs e) =>
             {
-                if(CustomMap.LocationAuthStatus == CustomMap.LocAuthStatus.NotAllowed)
+                if(Device.OS == TargetPlatform.iOS && CustomMap.LocationAuthStatus == CustomMap.LocAuthStatus.NotAllowed)
                 {
                     DisplayAlert("Location Services Not Enabled", "Enable location services in Settings", "Ok");
                 }
