@@ -21,13 +21,16 @@ namespace XamarinMaps.Droid
 {
     public class CustomMapRendererAndroid : MapRenderer, IOnMapReadyCallback
     {
-        LocationManager locationManager;
+        LocationManager locMgr;
+        Criteria locCriteria;
 
         GoogleMap googleMap;
         Android.Locations.Geocoder geocoder;
 
         List<Polyline> polylineList;
         List<Marker> markerList;
+
+        GmsRouteResult currRouteResult;
 
         MapView NativeMapView
         {
@@ -57,6 +60,11 @@ namespace XamarinMaps.Droid
         {
             geocoder = new Android.Locations.Geocoder(FormsActivity);
 
+            locMgr = (LocationManager)FormsActivity.GetSystemService(Activity.LocationService);
+
+            locCriteria = new Criteria();
+            locCriteria.Accuracy = Accuracy.Fine;
+
             polylineList = new List<Polyline>();
             markerList = new List<Marker>();
         }
@@ -73,7 +81,7 @@ namespace XamarinMaps.Droid
                 }
 
                 CustomMap oldCustomMap = e.OldElement as CustomMap;
-                //oldCustomMap.CalculateRouteFromUserLocationNativeHandler -= CalculateRouteFromUserLocation;
+                oldCustomMap.CalculateRouteFromUserLocationNativeHandler -= CalculateRouteFromUserLocation;
                 oldCustomMap.CalculateRouteNativeHandler -= CalculateRoute;
                 oldCustomMap.ClearRouteNativeHandler -= ClearRoute;
                 oldCustomMap.CenterOnUsersLocationNativeHandler -= CenterOnUsersLocation;
@@ -83,7 +91,7 @@ namespace XamarinMaps.Droid
             if (e.NewElement != null)
             {
                 CustomMap newCustomMap = e.NewElement as CustomMap;
-                //newCustomMap.CalculateRouteFromUserLocationNativeHandler += CalculateRouteFromUserLocation;
+                newCustomMap.CalculateRouteFromUserLocationNativeHandler += CalculateRouteFromUserLocation;
                 newCustomMap.CalculateRouteNativeHandler += CalculateRoute;
                 newCustomMap.ClearRouteNativeHandler += ClearRoute;
                 newCustomMap.CenterOnUsersLocationNativeHandler += CenterOnUsersLocation;
@@ -105,88 +113,135 @@ namespace XamarinMaps.Droid
             };
         }
 
-        async void CalculateRoute(object sender, EventArgs e)
+        void CalculateRoute(object sender, EventArgs e)
+        {
+            Task.Run(CalculateRouteAsync);
+        }
+
+        async Task CalculateRouteAsync()
         {
             try
             {
                 ClearRoute();
 
-                IList<Address> sourceAddressList = await geocoder.GetFromLocationAsync(CustomMapView.RouteSource.Latitude, CustomMapView.RouteSource.Longitude, 1);
+                LatLng sourceLatLng = await GetLatLngForPositionAsync(CustomMapView.RouteSource);
+                LatLng destLatLng = await GetLatLngForPositionAsync(CustomMapView.RouteDestination);
 
-                if(sourceAddressList.Count > 0)
+                if(sourceLatLng != null && destLatLng != null)
                 {
-                    IList<Address> destAddressList = await geocoder.GetFromLocationAsync(CustomMapView.RouteDestination.Latitude, CustomMapView.RouteDestination.Longitude, 1);
+                    CalculateRouteDetailsAysnc(sourceLatLng, destLatLng, true, true);                       
+                }               
+            }
+            catch(Exception e)
+            {
+                System.Diagnostics.Debug.WriteLine(e.Message);
+                return;
+            }
+        }
 
-                    if(destAddressList.Count > 0)
-                    {
-                        LatLng sourceLatLng = new LatLng(sourceAddressList[0].Latitude, sourceAddressList[0].Longitude);
-                        LatLng destLatLng = new LatLng(destAddressList[0].Latitude, destAddressList[0].Longitude);
+        void CalculateRouteFromUserLocation(object sender, EventArgs e)
+        {  
+            Task.Run(CalculateRouteFromUserLocationAysnc);
+        }
 
-                        string strGoogleDirectionUrl = BuildGoogleDirectionUrl(sourceLatLng, destLatLng);
+        async Task CalculateRouteFromUserLocationAysnc()
+        {
+            try
+            {
+                ClearRoute();
 
-                        string strJSONDirectionResponse = await HttpRequest(strGoogleDirectionUrl);
+                LatLng sourceLatLng = GetUserLatLng();
+                LatLng destLatLng = await GetLatLngForPositionAsync(CustomMapView.RouteDestination);
 
-                        if ( strJSONDirectionResponse != "error" )
-                        {
-                            //mark source and destination point
-                            MarkOnMap("Source", sourceLatLng);
-                            MarkOnMap("Destination", destLatLng);
-                        }
-
-                        GmsDirectionResult routeData = JsonConvert.DeserializeObject<GmsDirectionResult>(strJSONDirectionResponse);
-
-                        if (routeData != null && routeData.Routes != null)
-                        {
-                            if (routeData.Status == GmsDirectionResultStatus.Ok)
-                            {
-                                GmsRouteResult routeResult;
-                                TimeSpan timespan;
-
-                                for (int i = routeData.Routes.Count() - 1; i >= 0 ; i--)
-                                {
-                                    routeResult = routeData.Routes.ElementAt(i);
-
-                                    timespan = routeResult.Duration();
-                                    System.Diagnostics.Debug.WriteLine(timespan.ToString(@"hh\:mm\:ss\:fff"));
-
-                                    if (routeResult != null && routeResult.Polyline.Positions != null && routeResult.Polyline.Positions.Count() > 0)
-                                    {
-                                        PolylineOptions polylineOptions = new PolylineOptions();
-
-                                        if(i == 0)
-                                        {
-                                            polylineOptions.InvokeColor(Android.Graphics.Color.Blue.ToArgb());                                            
-                                        }
-                                        else
-                                        {
-                                            polylineOptions.InvokeColor(Android.Graphics.Color.Gray.ToArgb());
-                                        }
-
-                                        foreach (Position position in routeResult.Polyline.Positions)
-                                        {
-                                            polylineOptions.Add(new LatLng(position.Latitude, position.Longitude));
-                                        }
-
-                                        polylineList.Add(googleMap.AddPolyline(polylineOptions));
-
-                                        if(i == 0)
-                                        {
-                                            LatLng sw = new LatLng(routeResult.Bounds.SouthWest.Latitude, routeResult.Bounds.SouthWest.Longitude);
-                                            LatLng ne = new LatLng(routeResult.Bounds.NorthEast.Latitude, routeResult.Bounds.NorthEast.Longitude);
-
-                                            googleMap.AnimateCamera(CameraUpdateFactory.NewLatLngBounds(new LatLngBounds(sw, ne), 120));
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                if (sourceLatLng != null && destLatLng != null)
+                {
+                    CalculateRouteDetailsAysnc(sourceLatLng, destLatLng, false, true);
                 }
             }
             catch
             {
                 return;
             }
+        }
+
+        async void CalculateRouteDetailsAysnc(LatLng sourceLatLng, LatLng destLatLng, bool markSource, bool markDest)
+        {
+            string strGoogleDirectionUrl = BuildGoogleDirectionUrl(sourceLatLng, destLatLng);
+
+            string strJSONDirectionResponse = await HttpRequest(strGoogleDirectionUrl);
+
+            if (strJSONDirectionResponse != "error")
+            {
+                if(markSource)
+                    MarkOnMap("Source", sourceLatLng);
+
+                if(markDest)
+                    MarkOnMap("Destination", destLatLng);
+            }
+
+            GmsDirectionResult routeData = JsonConvert.DeserializeObject<GmsDirectionResult>(strJSONDirectionResponse);
+
+            if (routeData != null && routeData.Routes != null)
+            {
+                if (routeData.Status == GmsDirectionResultStatus.Ok)
+                {
+                    GmsRouteResult routeResult;
+                    TimeSpan timespan;
+
+                    for (int i = routeData.Routes.Count() - 1; i >= 0; i--)
+                    {
+                        routeResult = routeData.Routes.ElementAt(i);
+
+                        timespan = routeResult.Duration();
+                        System.Diagnostics.Debug.WriteLine(timespan.ToString(@"hh\:mm\:ss\:fff"));
+
+                        if (routeResult != null && routeResult.Polyline.Positions != null && routeResult.Polyline.Positions.Count() > 0)
+                        {
+                            PolylineOptions polylineOptions = new PolylineOptions();
+
+                            if (i == 0)
+                            {
+                                currRouteResult = routeResult;
+                                polylineOptions.InvokeColor(Android.Graphics.Color.Blue.ToArgb());
+                            }
+                            else
+                            {
+                                polylineOptions.InvokeColor(Android.Graphics.Color.Gray.ToArgb());
+                            }
+
+                            foreach (Position position in routeResult.Polyline.Positions)
+                            {
+                                polylineOptions.Add(new LatLng(position.Latitude, position.Longitude));
+                            }
+
+                            Device.BeginInvokeOnMainThread(() => 
+                            {
+                                polylineList.Add(googleMap.AddPolyline(polylineOptions));                                
+
+                                if (routeResult == currRouteResult)
+                                {
+                                    LatLng sw = new LatLng(routeResult.Bounds.SouthWest.Latitude, routeResult.Bounds.SouthWest.Longitude);
+                                    LatLng ne = new LatLng(routeResult.Bounds.NorthEast.Latitude, routeResult.Bounds.NorthEast.Longitude);
+
+                                    googleMap.AnimateCamera(CameraUpdateFactory.NewLatLngBounds(new LatLngBounds(sw, ne), 120));
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        async Task<LatLng> GetLatLngForPositionAsync(Position pos)
+        {
+            IList<Address> addressList = await geocoder.GetFromLocationAsync(pos.Latitude, pos.Longitude, 1);
+
+            if (addressList.Count > 0)
+            {
+                return new LatLng(addressList[0].Latitude, addressList[0].Longitude);
+            }
+
+            return null;
         }
 
         async Task<string> HttpRequest(string strUri)
@@ -226,7 +281,10 @@ namespace XamarinMaps.Droid
                 marker.SetIcon(BitmapDescriptorFactory.FromResource(resourceId));                
             }
 
-            markerList.Add(googleMap.AddMarker(marker));
+            Device.BeginInvokeOnMainThread(() =>                                         
+            {
+                markerList.Add(googleMap.AddMarker(marker));                
+            });
         }
 
         string BuildGoogleDirectionUrl(LatLng sourceLatLng, LatLng destLatLng)
@@ -244,17 +302,12 @@ namespace XamarinMaps.Droid
         {
             if (googleMap == null)
                 return;
-            
-            locationManager = (LocationManager)FormsActivity.GetSystemService(Activity.LocationService);
 
-            Criteria criteria = new Criteria();
-            criteria.Accuracy = Accuracy.Fine;
+            LatLng loc = GetUserLatLng();
 
-            Location location = locationManager.GetLastKnownLocation(locationManager.GetBestProvider(criteria, false));
-
-            if (location != null)
+            if (loc != null)
             {
-                googleMap.AnimateCamera(CameraUpdateFactory.NewLatLngZoom(new LatLng(location.Latitude, location.Longitude), 15));
+                googleMap.AnimateCamera(CameraUpdateFactory.NewLatLngZoom(loc, 15));
 
                 //CameraPosition cameraPosition = new CameraPosition.Builder()
                 //    .Target(new LatLng(location.Latitude, location.Longitude))      // Sets the center of the map to location user
@@ -267,10 +320,27 @@ namespace XamarinMaps.Droid
             }
         }
 
+        LatLng GetUserLatLng()
+        {
+            Location location = locMgr.GetLastKnownLocation(locMgr.GetBestProvider(locCriteria, false));
+
+            if(location != null)
+            {
+                return new LatLng(location.Latitude, location.Longitude);
+            }
+
+            return null;
+        }
+
         void ClearRoute(object sender = null, EventArgs e = null)
         {
-            ClearMarkers();
-            ClearPolylines();
+            currRouteResult = null;
+
+            Device.BeginInvokeOnMainThread(() =>
+            {
+                ClearMarkers();
+                ClearPolylines();                
+            });
         }
 
         void ClearMarkers()
