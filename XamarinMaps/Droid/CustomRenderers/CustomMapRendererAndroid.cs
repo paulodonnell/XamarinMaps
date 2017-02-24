@@ -26,6 +26,9 @@ namespace XamarinMaps.Droid
         GoogleMap googleMap;
         Android.Locations.Geocoder geocoder;
 
+        List<Polyline> polylineList;
+        List<Marker> markerList;
+
         MapView NativeMapView
         {
             get
@@ -53,6 +56,9 @@ namespace XamarinMaps.Droid
         public CustomMapRendererAndroid()
         {
             geocoder = new Android.Locations.Geocoder(FormsActivity);
+
+            polylineList = new List<Polyline>();
+            markerList = new List<Marker>();
         }
 
         protected override void OnElementChanged(Xamarin.Forms.Platform.Android.ElementChangedEventArgs<Xamarin.Forms.Maps.Map> e)
@@ -69,7 +75,7 @@ namespace XamarinMaps.Droid
                 CustomMap oldCustomMap = e.OldElement as CustomMap;
                 //oldCustomMap.CalculateRouteFromUserLocationNativeHandler -= CalculateRouteFromUserLocation;
                 oldCustomMap.CalculateRouteNativeHandler -= CalculateRoute;
-                //oldCustomMap.ClearRouteNativeHandler -= ClearRoute;
+                oldCustomMap.ClearRouteNativeHandler -= ClearRoute;
                 oldCustomMap.CenterOnUsersLocationNativeHandler -= CenterOnUsersLocation;
                 //oldCustomMap.SearchLocalNativeHandler -= SearchLocal;
             }
@@ -79,7 +85,7 @@ namespace XamarinMaps.Droid
                 CustomMap newCustomMap = e.NewElement as CustomMap;
                 //newCustomMap.CalculateRouteFromUserLocationNativeHandler += CalculateRouteFromUserLocation;
                 newCustomMap.CalculateRouteNativeHandler += CalculateRoute;
-                //newCustomMap.ClearRouteNativeHandler += ClearRoute;
+                newCustomMap.ClearRouteNativeHandler += ClearRoute;
                 newCustomMap.CenterOnUsersLocationNativeHandler += CenterOnUsersLocation;
                 //newCustomMap.SearchLocalNativeHandler += SearchLocal;
 
@@ -103,6 +109,8 @@ namespace XamarinMaps.Droid
         {
             try
             {
+                ClearRoute();
+
                 IList<Address> sourceAddressList = await geocoder.GetFromLocationAsync(CustomMapView.RouteSource.Latitude, CustomMapView.RouteSource.Longitude, 1);
 
                 if(sourceAddressList.Count > 0)
@@ -159,25 +167,15 @@ namespace XamarinMaps.Droid
                                             polylineOptions.Add(new LatLng(position.Latitude, position.Longitude));
                                         }
 
-                                        googleMap.AddPolyline(polylineOptions);
+                                        polylineList.Add(googleMap.AddPolyline(polylineOptions));
 
-                                        //this.SetRouteData(route, r);
+                                        if(i == 0)
+                                        {
+                                            LatLng sw = new LatLng(routeResult.Bounds.SouthWest.Latitude, routeResult.Bounds.SouthWest.Longitude);
+                                            LatLng ne = new LatLng(routeResult.Bounds.NorthEast.Latitude, routeResult.Bounds.NorthEast.Longitude);
 
-                                        //var routeOptions = new PolylineOptions();
-
-                                        //if (route.Color != Color.Default)
-                                        //{
-                                        //    routeOptions.InvokeColor(route.Color.ToAndroid().ToArgb());
-                                        //}
-                                        //if (route.LineWidth > 0)
-                                        //{
-                                        //    routeOptions.InvokeWidth(route.LineWidth);
-                                        //}
-                                        //routeOptions.Add(r.Polyline.Positions.Select(i => i.ToLatLng()).ToArray());
-
-                                        //this._routes.Add(route, this._googleMap.AddPolyline(routeOptions));
-
-                                        //this.MapFunctions.RaiseRouteCalculationFinished(route);
+                                            googleMap.AnimateCamera(CameraUpdateFactory.NewLatLngBounds(new LatLngBounds(sw, ne), 120));
+                                        }
                                     }
                                 }
                             }
@@ -199,7 +197,7 @@ namespace XamarinMaps.Droid
             try
             {
                 strResultData = await webclient.DownloadStringTaskAsync(new Uri(strUri));
-                Console.WriteLine(strResultData);
+                //Console.WriteLine(strResultData);
             }
             catch
             {
@@ -228,7 +226,7 @@ namespace XamarinMaps.Droid
                 marker.SetIcon(BitmapDescriptorFactory.FromResource(resourceId));                
             }
 
-            googleMap.AddMarker(marker);
+            markerList.Add(googleMap.AddMarker(marker));
         }
 
         string BuildGoogleDirectionUrl(LatLng sourceLatLng, LatLng destLatLng)
@@ -267,6 +265,32 @@ namespace XamarinMaps.Droid
 
                 //googleMap.AnimateCamera(CameraUpdateFactory.NewCameraPosition(cameraPosition));
             }
+        }
+
+        void ClearRoute(object sender = null, EventArgs e = null)
+        {
+            ClearMarkers();
+            ClearPolylines();
+        }
+
+        void ClearMarkers()
+        {
+            foreach(Marker m in markerList)
+            {
+                m.Remove();
+            }
+
+            markerList.Clear();
+        }
+
+        void ClearPolylines()
+        {
+            foreach(Polyline pl in polylineList)
+            {
+                pl.Remove();
+            }
+
+            polylineList.Clear();
         }
 
    }
