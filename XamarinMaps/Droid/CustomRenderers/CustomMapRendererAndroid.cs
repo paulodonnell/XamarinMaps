@@ -77,7 +77,8 @@ namespace XamarinMaps.Droid
             {
                 if(googleMap != null)
                 {
-                    //remove google map handlers
+                    googleMap.MapLongClick -= OnMapLongClick;
+                    googleMap.InfoWindowClick -= OnMapMarkerInfoWindowClick;
                 }
 
                 CustomMap oldCustomMap = e.OldElement as CustomMap;
@@ -106,6 +107,9 @@ namespace XamarinMaps.Droid
         public virtual void OnMapReady(GoogleMap googleMap)
         {
             this.googleMap = googleMap;
+
+            googleMap.MapLongClick += OnMapLongClick;
+            googleMap.InfoWindowClick += OnMapMarkerInfoWindowClick;
 
             googleMap.MyLocationButtonClick += (object sender, GoogleMap.MyLocationButtonClickEventArgs e) => 
             {
@@ -363,5 +367,29 @@ namespace XamarinMaps.Droid
             polylineList.Clear();
         }
 
+        void OnMapLongClick(object sender, GoogleMap.MapLongClickEventArgs e)
+        {
+            MarkOnMap($"{e.Point.Latitude},{e.Point.Longitude}", e.Point);
+        }
+
+        void OnMapMarkerInfoWindowClick(object sender, GoogleMap.InfoWindowClickEventArgs e)
+        {
+            try
+            {
+                ClearPolylines();
+                
+                LatLng sourceLatLng = GetUserLatLng();
+                LatLng destLatLng = e.Marker.Position;
+                
+                if (sourceLatLng != null && destLatLng != null)
+                {
+                    CalculateRouteDetailsAysnc(sourceLatLng, destLatLng, false, true);
+                }
+            }
+            catch
+            {
+                return;
+            }
+        }
    }
 }
