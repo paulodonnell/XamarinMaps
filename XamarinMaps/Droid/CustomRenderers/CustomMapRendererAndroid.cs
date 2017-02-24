@@ -13,14 +13,24 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using TK.CustomMap.Api.Google;
 using System.Linq;
-using Android.Graphics;
 using Xamarin.Forms.Maps;
+using Android;
+using Android.Support.V4.Content;
+using Android.Support.V4.App;
 
 [assembly: ExportRenderer (typeof(CustomMap), typeof(CustomMapRendererAndroid))]
 namespace XamarinMaps.Droid
 {
     public class CustomMapRendererAndroid : MapRenderer, IOnMapReadyCallback
     {
+        readonly string[] PermissionsLocation =
+        {
+          Manifest.Permission.AccessCoarseLocation,
+          Manifest.Permission.AccessFineLocation
+        };
+
+        const int RequestLocationId = 0;
+
         LocationManager locMgr;
         Criteria locCriteria;
 
@@ -71,7 +81,16 @@ namespace XamarinMaps.Droid
 
         protected override void OnElementChanged(Xamarin.Forms.Platform.Android.ElementChangedEventArgs<Xamarin.Forms.Maps.Map> e)
         {
-            base.OnElementChanged(e);
+            try
+            {
+                base.OnElementChanged(e);                
+            }
+            catch(Java.Lang.SecurityException exception)
+            {  
+                //Newer versions of android OS allow users to set location permissions at runtime which can cause a security exception
+                //we will catch it here and continue as we check for the appropriete permissions when needed
+                System.Diagnostics.Debug.WriteLine(exception.Message);
+            }
 
             if (e.OldElement != null)
             {
@@ -237,14 +256,14 @@ namespace XamarinMaps.Droid
         }
 
         async Task<LatLng> GetLatLngForPositionAsync(Position pos)
-        {
+        {            
             IList<Address> addressList = await geocoder.GetFromLocationAsync(pos.Latitude, pos.Longitude, 1);
-
+            
             if (addressList.Count > 0)
             {
                 return new LatLng(addressList[0].Latitude, addressList[0].Longitude);
-            }
-
+            }                
+        
             return null;
         }
 
@@ -326,11 +345,24 @@ namespace XamarinMaps.Droid
 
         LatLng GetUserLatLng()
         {
-            Location location = locMgr.GetLastKnownLocation(locMgr.GetBestProvider(locCriteria, false));
+            const string permission = Manifest.Permission.AccessFineLocation;
 
-            if(location != null)
+            if (ContextCompat.CheckSelfPermission(FormsActivity, permission) == PermissionChecker.PermissionGranted)
             {
-                return new LatLng(location.Latitude, location.Longitude);
+                CustomMap.LocationAuthStatus = CustomMap.LocAuthStatus.AllowedInBackground;
+
+                Location location = locMgr.GetLastKnownLocation(locMgr.GetBestProvider(locCriteria, false));
+                
+                if(location != null)
+                {
+                    return new LatLng(location.Latitude, location.Longitude);
+                }
+            }        
+            else
+            {
+                CustomMap.LocationAuthStatus = CustomMap.LocAuthStatus.NotAllowed;
+
+                ActivityCompat.RequestPermissions(FormsActivity, PermissionsLocation, RequestLocationId);
             }
 
             return null;
