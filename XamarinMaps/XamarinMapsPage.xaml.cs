@@ -35,15 +35,18 @@ namespace XamarinMaps
 
             searchEntry.Placeholder = "Enter text...";
             searchEntry.HorizontalOptions = LayoutOptions.FillAndExpand;
+            searchEntry.Completed += StartSearch;
 
             searchBtn.Text = "Search";
-            searchBtn.Clicked += (object sender, EventArgs e) => 
+            searchBtn.Clicked += StartSearch;
+        }
+
+        void StartSearch(object sender, EventArgs e)
+        {
+            if (!string.IsNullOrEmpty(searchEntry.Text))
             {
-                if(!string.IsNullOrEmpty(searchEntry.Text))
-                {
-                    map.SearchLocal(searchEntry.Text);                    
-                }
-            };
+                map.SearchLocal(searchEntry.Text);
+            }
         }
 
         void InitBtns()
