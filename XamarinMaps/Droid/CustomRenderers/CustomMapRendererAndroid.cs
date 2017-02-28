@@ -17,6 +17,8 @@ using Xamarin.Forms.Maps;
 using Android;
 using Android.Support.V4.Content;
 using Android.Support.V4.App;
+using Android.Gms.Location.Places;
+using Android.Gms.Common.Apis;
 
 [assembly: ExportRenderer (typeof(CustomMap), typeof(CustomMapRendererAndroid))]
 namespace XamarinMaps.Droid
@@ -41,6 +43,9 @@ namespace XamarinMaps.Droid
         List<Marker> markerList;
 
         GmsRouteResult currRouteResult;
+
+        private GoogleApiClient _apiClient;
+        private AutocompletePredictionBuffer autocompletePredictionBuffer;
 
         MapView NativeMapView
         {
@@ -105,7 +110,7 @@ namespace XamarinMaps.Droid
                 oldCustomMap.CalculateRouteNativeHandler -= CalculateRoute;
                 oldCustomMap.ClearRouteNativeHandler -= ClearRoute;
                 oldCustomMap.CenterOnUsersLocationNativeHandler -= CenterOnUsersLocation;
-                //oldCustomMap.SearchLocalNativeHandler -= SearchLocal;
+                oldCustomMap.SearchLocalNativeHandler -= SearchLocal;
             }
 
             if (e.NewElement != null)
@@ -115,7 +120,7 @@ namespace XamarinMaps.Droid
                 newCustomMap.CalculateRouteNativeHandler += CalculateRoute;
                 newCustomMap.ClearRouteNativeHandler += ClearRoute;
                 newCustomMap.CenterOnUsersLocationNativeHandler += CenterOnUsersLocation;
-                //newCustomMap.SearchLocalNativeHandler += SearchLocal;
+                newCustomMap.SearchLocalNativeHandler += SearchLocal;
 
                 //UpdateShowTraffic();
 
@@ -196,10 +201,10 @@ namespace XamarinMaps.Droid
             if (strJSONDirectionResponse != "error")
             {
                 if(markSource)
-                    MarkOnMap("Source", sourceLatLng);
+                    AddMarker("Source", sourceLatLng);
 
                 if(markDest)
-                    MarkOnMap("Destination", destLatLng);
+                    AddMarker("Destination", destLatLng);
             }
 
             GmsDirectionResult routeData = JsonConvert.DeserializeObject<GmsDirectionResult>(strJSONDirectionResponse);
@@ -293,7 +298,7 @@ namespace XamarinMaps.Droid
             return strResultData;
         }
 
-        void MarkOnMap(string title, LatLng pos, int resourceId = -1)
+        void AddMarker(string title, LatLng pos, int resourceId = -1)
         {
             var marker = new MarkerOptions();
             marker.SetTitle(title);
@@ -401,7 +406,7 @@ namespace XamarinMaps.Droid
 
         void OnMapLongClick(object sender, GoogleMap.MapLongClickEventArgs e)
         {
-            MarkOnMap($"{e.Point.Latitude},{e.Point.Longitude}", e.Point);
+            AddMarker($"{e.Point.Latitude},{e.Point.Longitude}", e.Point);
         }
 
         void OnMapMarkerInfoWindowClick(object sender, GoogleMap.InfoWindowClickEventArgs e)
@@ -421,6 +426,151 @@ namespace XamarinMaps.Droid
             catch
             {
                 return;
+            }
+        }
+
+        void SearchLocal(object sender, EventArgs e)
+        {
+            GetPredictionsFromPlacesAPI(CustomMapView.SearchText, googleMap.Projection.VisibleRegion.LatLngBounds);
+        }
+
+        public async Task GetPredictionsFromPlacesAPI(string searchText, LatLngBounds bounds)
+        {
+            if (this._apiClient == null || !this._apiClient.IsConnected) 
+            {
+                ConnectToPlacesAPI();                
+            }
+
+            //List<IPlaceResult> result = new List<IPlaceResult>();
+
+            if (autocompletePredictionBuffer != null)
+            {
+                autocompletePredictionBuffer.Dispose();
+                autocompletePredictionBuffer = null;
+            }
+
+            autocompletePredictionBuffer = await PlacesClass.GeoDataApi.GetAutocompletePredictionsAsync(this._apiClient, searchText, bounds, null);
+
+            if (autocompletePredictionBuffer != null)
+            {
+                if(autocompletePredictionBuffer.Status.IsSuccess)
+                {
+                    if(autocompletePredictionBuffer.Count > 0)
+                    {
+                        ClearRoute(null, null);
+
+                        IAutocompletePrediction pred;
+                        List<string> placeIds = new List<string>();
+
+                        for (int i = 0; i < autocompletePredictionBuffer.Count; i++)
+                        {
+                            pred = autocompletePredictionBuffer.ElementAt(i);
+                            placeIds.Add(pred.PlaceId);
+                        }                        
+
+                        PlaceBuffer placeBuffer = await PlacesClass.GeoDataApi.GetPlaceByIdAsync(this._apiClient, placeIds.ToArray());
+
+                        if (placeBuffer == null || !placeBuffer.Any())
+                        {
+                            System.Diagnostics.Debug.WriteLine("No results found for individual place details for search: " + searchText);
+                            return;
+                        }
+                        else
+                        {
+                            IPlace placeDetails;
+                            LatLngBounds.Builder builder = new LatLngBounds.Builder();
+
+                            for (int i = 0; i < placeBuffer.Count; i++)
+                            {
+                                placeDetails = placeBuffer.ElementAt(i);
+
+                                this.AddMarker(placeDetails.NameFormatted.ToString(), placeDetails.LatLng);
+
+                                builder.Include(placeDetails.LatLng);   
+                            }
+
+                            LatLngBounds newBounds = builder.Build();
+                            CameraUpdate cu = CameraUpdateFactory.NewLatLngBounds(newBounds, 120);
+                            googleMap.AnimateCamera(cu);                                
+                        }
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine("No results found for search: " + searchText);
+                    }
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine(autocompletePredictionBuffer.Status.StatusMessage);
+                }
+
+                //result.AddRange(this._buffer.Select(i =>
+                //    new TKNativeAndroidPlaceResult
+                //    {
+                //        Description = i.GetPrimaryText(null),
+                //        Subtitle = i.GetSecondaryText(null),
+                //        PlaceId = i.PlaceId,
+                //    }));
+            }
+
+            //return result;
+        }
+
+        public async Task GetDetails(string id)
+        {
+            if (this._apiClient == null || !this._apiClient.IsConnected) 
+            {
+                ConnectToPlacesAPI();                
+            }
+
+            PlaceBuffer nativeResult = await PlacesClass.GeoDataApi.GetPlaceByIdAsync(this._apiClient, id);
+
+            if (nativeResult == null || !nativeResult.Any()) 
+            {
+                return;   
+            }
+
+            IPlace nativeDetails = nativeResult.First();
+
+            this.AddMarker(nativeDetails.NameFormatted.ToString(), nativeDetails.LatLng);
+
+            //return new TKPlaceDetails
+            //{
+            //    Coordinate = nativeDetails.LatLng.ToPosition(),
+            //    FormattedAddress = nativeDetails.AddressFormatted.ToString(),
+            //    InternationalPhoneNumber = nativeDetails.PhoneNumberFormatted?.ToString(),
+            //    Website = nativeDetails.WebsiteUri?.ToString()
+            //};
+        }
+
+        public void ConnectToPlacesAPI()
+        {
+            if (this._apiClient == null)
+            {
+                this._apiClient = new GoogleApiClient.Builder(Forms.Context)
+                    .AddApi(PlacesClass.GEO_DATA_API)
+                    .Build();
+            }
+            if (!this._apiClient.IsConnected && !this._apiClient.IsConnecting)
+            {
+                this._apiClient.Connect();
+            }
+        }
+
+        public void DisconnectAndReleasePlacesAPI()
+        {
+            if (this._apiClient == null) return;
+
+            if (this._apiClient.IsConnected)
+                this._apiClient.Disconnect();
+
+            this._apiClient.Dispose();
+            this._apiClient = null;
+
+            if (this.autocompletePredictionBuffer != null)
+            {
+                this.autocompletePredictionBuffer.Dispose();
+                this.autocompletePredictionBuffer = null;
             }
         }
    }
